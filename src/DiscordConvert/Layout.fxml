@@ -20,7 +20,7 @@
       <Label text="Encoding" />
       <VBox style="-fx-alignment: center;">
          <children>
-            <RadioButton mnemonicParsing="false" text="mp4">
+            <RadioButton mnemonicParsing="false" text="mp4" selected="true">
                <toggleGroup>
                   <ToggleGroup fx:id="codecToggleGroup"/>
                </toggleGroup>

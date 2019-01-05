@@ -7,7 +7,8 @@ import java.lang.StringBuilder
 
 fun main(){
     val pb = ProcessBuilder()
-    pb.command("/usr/local/bin/ffmpeg", "-version")
+    pb.command("ffprobe", "/Users/shein/Downloads/5b10912ebc3e6.mp4", "-show_entries", "format=duration")
+    pb.environment().put("PATH", System.getenv("PATH"))
     println("Run echo command")
     val process = pb.start()
     val errCode = process.waitFor()

@@ -10,6 +10,7 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.lang.StringBuilder
 import java.nio.file.Path
+import javax.print.attribute.IntegerSyntax
 
 class Controller(val primaryStage : Stage){
 
@@ -30,8 +31,8 @@ class Controller(val primaryStage : Stage){
     val selectedCodec : String
         get() = (codecToggleGroup.selectedToggle as RadioButton).text
 
-    val selectedFile : Path
-        get() = Path.of(fileTextField.text)
+    val selectedFile : File
+        get() = File(fileTextField.text)
 
     init{
         openFileChooser.title = "Choose Video File to Convert"
@@ -61,33 +62,44 @@ class Controller(val primaryStage : Stage){
         val output = openFileChooser.showOpenDialog(primaryStage)
         if(output != null) {
             fileTextField.text = output.absolutePath
-            println("Duration: ${ffmpeg.readDuration(output)}s")
         }
     }
 
     fun handleConvertButton(){
-        println(selectedFile)
-
-        saveFileChooser.showSaveDialog(primaryStage)
+        var output : File? = saveFileChooser.showSaveDialog(primaryStage)
+        if(output != null)
+            ffmpeg.convertFile(selectedFile,selectedCodec,output)
     }
 
     object ffmpeg{
+        val targetSize = 64000;
         private fun run(vararg command: String): String {
             val pb = ProcessBuilder()
             pb.command(*command)
             pb.environment().put("PATH", System.getenv("PATH"))
             val process = pb.start()
             val errCode = process.waitFor()
-            val output = output(process.errorStream)
-            println("Echo command executed, any errors? ${ if(errCode == 0) "No" else "Yes" }")
-            println("Echo output: ${output}")
+            val output = output(process.inputStream)
             return output;
         }
 
         fun readDuration(file : File) : Double {
-            val output = run("ffprobe", file.absolutePath)
-            println("OUTPUT FROM PROGRAM: ${output}")
-            return 3.14
+            val output = run("ffprobe", file.path, "-show_entries", "format=duration")
+            val line2 = output.split(System.lineSeparator())[1]
+            val dur = line2.substring(9,line2.length)
+            return dur.toDouble()
+        }
+
+        fun convertFile(inputFile : File, codec : String, outputFile : File){
+            val duration = readDuration(inputFile)
+            val bitrate = (targetSize / duration * .95).toInt()
+            val bV = bitrate - 128
+            run("ffmpeg", "-i", inputFile.path,
+                                     "-b:v", "${bitrate}k",
+                                     "-maxrate", "${bitrate}k",
+                                     "-bufsize", "${bitrate}k",
+                                     "-b:a", "128k",
+                                     outputFile.path)
         }
 
         private fun output(inputStream : InputStream) : String {
