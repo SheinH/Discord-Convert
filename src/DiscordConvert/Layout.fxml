@@ -22,13 +22,13 @@
          <children>
             <RadioButton mnemonicParsing="false" text="mp4">
                <toggleGroup>
-                  <ToggleGroup fx:id="codec" />
+                  <ToggleGroup fx:id="codecToggleGroup"/>
                </toggleGroup>
                <VBox.margin>
                   <Insets right="10.0" />
                </VBox.margin>
             </RadioButton>
-            <RadioButton mnemonicParsing="false" text="webm" toggleGroup="$codec" />
+            <RadioButton mnemonicParsing="false" text="webm" toggleGroup="$codecToggleGroup" />
          </children>
       </VBox>
       <Button fx:id="convertButton" maxWidth="1.7976931348623157E308" mnemonicParsing="false" text="Convert" />

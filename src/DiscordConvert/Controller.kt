@@ -1,26 +1,20 @@
 package DiscordConvert
 
-import javafx.event.EventHandler
 import javafx.fxml.FXML
-import javafx.fxml.Initializable
-import javafx.scene.Scene
-import javafx.scene.control.Button
-import javafx.scene.control.RadioButton
-import javafx.scene.control.TextField
-import javafx.scene.control.ToggleGroup
+import javafx.scene.control.*
 import javafx.stage.FileChooser
 import javafx.stage.Stage
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStream
 import java.io.InputStreamReader
+import java.lang.StringBuilder
 import java.nio.file.Path
-import java.util.concurrent.Executors
-import java.util.function.Consumer
 
 class Controller(val primaryStage : Stage){
 
     @FXML
-    private lateinit var toggleGroup : ToggleGroup
+    private lateinit var codecToggleGroup : ToggleGroup
     @FXML
     private lateinit var fileChooseButton : Button
     @FXML
@@ -28,59 +22,84 @@ class Controller(val primaryStage : Stage){
     @FXML
     private lateinit var fileTextField : TextField
 
-    private val fc : FileChooser = FileChooser()
+    private val openFileChooser : FileChooser = FileChooser()
+    private val saveFileChooser : FileChooser = FileChooser()
+    private val mp4Filter : FileChooser.ExtensionFilter = FileChooser.ExtensionFilter(".mp4", "*.mp4")
+    private val webmFilter : FileChooser.ExtensionFilter = FileChooser.ExtensionFilter(".webm", "*.webm")
 
     val selectedCodec : String
-        get() = (toggleGroup.selectedToggle as RadioButton).text
+        get() = (codecToggleGroup.selectedToggle as RadioButton).text
 
     val selectedFile : Path
         get() = Path.of(fileTextField.text)
 
     init{
-        fc.title = "Choose Video File to Convert"
+        openFileChooser.title = "Choose Video File to Convert"
         val extFilter = FileChooser.ExtensionFilter("Video files", "*.mp4", "*.webm",
             "*.mov", "*.flv", "*.mkv", "*.avi", "*.mov", "*.m4a", "*.wmv", "*.3gp")
-        fc.extensionFilters.add(extFilter)
+        openFileChooser.extensionFilters.add(extFilter)
     }
 
     @FXML
     private fun initialize()
     {
         fileChooseButton.setOnAction{ handleFileChoose() }
-        convertButton.setOnAction {  }
+        convertButton.setOnAction { handleConvertButton() }
+        codecToggleGroup.selectedToggleProperty().addListener { observable, old, new ->
+            val button  = new as RadioButton
+            saveFileChooser.extensionFilters.clear()
+            saveFileChooser.extensionFilters.add(
+                when(button.text){
+                    "webm"  -> webmFilter
+                    else    -> mp4Filter
+                }
+            )
+        }
     }
 
     fun handleFileChoose(){
-        val output = fc.showOpenDialog(primaryStage)
-        if(output != null)
+        val output = openFileChooser.showOpenDialog(primaryStage)
+        if(output != null) {
             fileTextField.text = output.absolutePath
+            println("Duration: ${ffmpeg.readDuration(output)}s")
+        }
     }
 
     fun handleConvertButton(){
         println(selectedFile)
+
+        saveFileChooser.showSaveDialog(primaryStage)
     }
 
-    fun run(command: String): String {
-        class StreamGobbler(private val inputStream: InputStream, private val consumer: Consumer<String>) : Runnable {
-            override fun run() {
-                BufferedReader(InputStreamReader(inputStream)).lines()
-                    .forEach(consumer)
+    object ffmpeg{
+        private fun run(vararg command: String): String {
+            val pb = ProcessBuilder()
+            pb.command(*command)
+            pb.environment().put("PATH", System.getenv("PATH"))
+            val process = pb.start()
+            val errCode = process.waitFor()
+            val output = output(process.errorStream)
+            println("Echo command executed, any errors? ${ if(errCode == 0) "No" else "Yes" }")
+            println("Echo output: ${output}")
+            return output;
+        }
+
+        fun readDuration(file : File) : Double {
+            val output = run("ffprobe", file.absolutePath)
+            println("OUTPUT FROM PROGRAM: ${output}")
+            return 3.14
+        }
+
+        private fun output(inputStream : InputStream) : String {
+            val stringBuilder = StringBuilder()
+            val bufferedReader = BufferedReader(InputStreamReader(inputStream))
+            var line : String? = bufferedReader.readLine()
+            while(line != null){
+                stringBuilder.append(line).append(System.lineSeparator())
+                line = bufferedReader.readLine()
             }
+            bufferedReader.close()
+            return stringBuilder.toString()
         }
-        val builder = ProcessBuilder()
-        if (isWindows) {
-            builder.command("cmd.exe", "/c", command)
-        } else {
-            builder.command("sh", "-c", command)
-        }
-        val process = builder.start()
-        var stringBuilder = StringBuilder()
-        val streamGobbler = StreamGobbler(process.inputStream, Consumer { stringBuilder.append(it) })
-        val executor = Executors.newSingleThreadExecutor()
-        executor.submit(streamGobbler)
-        val exitCode = process.waitFor()
-        assert(exitCode == 0)
-        executor.shutdown()
-        return stringBuilder.toString()
     }
 }
