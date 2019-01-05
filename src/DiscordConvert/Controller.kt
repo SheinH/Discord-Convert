@@ -2,6 +2,8 @@ package DiscordConvert
 
 import javafx.fxml.FXML
 import javafx.scene.control.*
+import javafx.scene.layout.Pane
+import javafx.scene.layout.VBox
 import javafx.stage.FileChooser
 import javafx.stage.Stage
 import java.io.BufferedReader
@@ -9,11 +11,12 @@ import java.io.File
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.lang.StringBuilder
-import java.nio.file.Path
-import javax.print.attribute.IntegerSyntax
+import java.util.concurrent.Executors
 
 class Controller(val primaryStage : Stage){
 
+    @FXML
+    private lateinit var mainVBox : VBox
     @FXML
     private lateinit var codecToggleGroup : ToggleGroup
     @FXML
@@ -22,6 +25,8 @@ class Controller(val primaryStage : Stage){
     private lateinit var convertButton : Button
     @FXML
     private lateinit var fileTextField : TextField
+    @FXML
+    private lateinit var progressIndicator: ProgressIndicator
 
     private val openFileChooser : FileChooser = FileChooser()
     private val saveFileChooser : FileChooser = FileChooser()
@@ -33,12 +38,26 @@ class Controller(val primaryStage : Stage){
 
     val selectedFile : File
         get() = File(fileTextField.text)
-
+    var inputEnabled : Boolean = true
+        set(value) {
+            fun setEnabled(pane : Pane, value : Boolean){
+                pane.children.forEach {
+                    if(it is Pane)
+                        setEnabled(it, value)
+                    else
+                        it.disableProperty().value = !value;
+                }
+            }
+            setEnabled(mainVBox, value)
+            progressIndicator.disableProperty().value = value;
+            progressIndicator.visibleProperty().value = !value;
+        }
     init{
         openFileChooser.title = "Choose Video File to Convert"
         val extFilter = FileChooser.ExtensionFilter("Video files", "*.mp4", "*.webm",
             "*.mov", "*.flv", "*.mkv", "*.avi", "*.mov", "*.m4a", "*.wmv", "*.3gp")
         openFileChooser.extensionFilters.add(extFilter)
+        saveFileChooser.extensionFilters.add(mp4Filter)
     }
 
     @FXML
@@ -46,7 +65,7 @@ class Controller(val primaryStage : Stage){
     {
         fileChooseButton.setOnAction{ handleFileChoose() }
         convertButton.setOnAction { handleConvertButton() }
-        codecToggleGroup.selectedToggleProperty().addListener { observable, old, new ->
+        codecToggleGroup.selectedToggleProperty().addListener { _, _, new ->
             val button  = new as RadioButton
             saveFileChooser.extensionFilters.clear()
             saveFileChooser.extensionFilters.add(
@@ -59,7 +78,7 @@ class Controller(val primaryStage : Stage){
     }
 
     fun handleFileChoose(){
-        val output = openFileChooser.showOpenDialog(primaryStage)
+        val output : File? = openFileChooser.showOpenDialog(primaryStage)
         if(output != null) {
             fileTextField.text = output.absolutePath
         }
@@ -67,12 +86,26 @@ class Controller(val primaryStage : Stage){
 
     fun handleConvertButton(){
         var output : File? = saveFileChooser.showSaveDialog(primaryStage)
-        if(output != null)
-            ffmpeg.convertFile(selectedFile,selectedCodec,output)
+        if(output != null && output != selectedFile)
+            ffmpeg.convertFile(selectedFile,selectedCodec,output,this)
+    }
+
+    fun disableInput(){
+        fun disable(pane : Pane){
+            pane.children.forEach {
+                if(it is Pane)
+                    disable(it)
+                else
+                    it.disableProperty().value = true;
+            }
+        }
+        disable(mainVBox)
+        progressIndicator.disableProperty().value = false;
+        progressIndicator.visibleProperty().value = true;
     }
 
     object ffmpeg{
-        val targetSize = 64000;
+        const val targetSize = 64000;
         private fun run(vararg command: String): String {
             val pb = ProcessBuilder()
             pb.command(*command)
@@ -83,6 +116,15 @@ class Controller(val primaryStage : Stage){
             return output;
         }
 
+        private fun runThread(controller : Controller, vararg command: String){
+            fun doStuff(){
+                controller.inputEnabled = false
+                run(*command)
+                controller.inputEnabled = true
+            }
+            val executor = Executors.newSingleThreadExecutor()
+            executor.submit{doStuff()}
+        }
         fun readDuration(file : File) : Double {
             val output = run("ffprobe", file.path, "-show_entries", "format=duration")
             val line2 = output.split(System.lineSeparator())[1]
@@ -90,14 +132,14 @@ class Controller(val primaryStage : Stage){
             return dur.toDouble()
         }
 
-        fun convertFile(inputFile : File, codec : String, outputFile : File){
+        fun convertFile(inputFile : File, codec : String, outputFile : File, controller : Controller){
             val duration = readDuration(inputFile)
             val bitrate = (targetSize / duration * .95).toInt()
             val bV = bitrate - 128
-            run("ffmpeg", "-i", inputFile.path,
-                                     "-b:v", "${bitrate}k",
-                                     "-maxrate", "${bitrate}k",
-                                     "-bufsize", "${bitrate}k",
+            runThread(controller,"ffmpeg", "-i", inputFile.path,
+                                     "-b:v", "${bV}k",
+                                     "-maxrate", "${bV}k",
+                                     "-bufsize", "${bV}k",
                                      "-b:a", "128k",
                                      outputFile.path)
         }

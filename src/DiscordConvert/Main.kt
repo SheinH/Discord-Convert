@@ -3,18 +3,13 @@ package DiscordConvert
 import javafx.application.Application
 import javafx.scene.Scene
 import javafx.stage.Stage
-import java.io.BufferedReader
-import java.io.InputStream
-import java.io.InputStreamReader
-import java.util.concurrent.Executors
-import java.util.function.Consumer
 import javafx.fxml.FXMLLoader
 import javafx.scene.Parent
 
 
 val isWindows = System.getProperty("os.name").toLowerCase().startsWith("windows");
 
-class HelloWorld : Application() {
+class Main : Application() {
     private lateinit var controller : Controller
 
     override fun start(primaryStage: Stage) {
@@ -30,5 +25,5 @@ class HelloWorld : Application() {
 }
 
 fun main(args: Array<String>) {
-    Application.launch(HelloWorld::class.java,*args)
+    Application.launch(Main::class.java,*args)
 }
